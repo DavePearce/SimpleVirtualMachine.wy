@@ -14,7 +14,7 @@ public type SVM is {
    u32[] stack
 } where sp <= |stack|
 
-public property SVM(u8[] code, u32 datasize, u32 stacksize) -> (SVM r):
+public property create(u8[] code, u32 datasize, u32 stacksize) -> (SVM r):
    {pc:0, sp:0, code: code, data: [0; datasize], stack: [0; stacksize]}
 
 
@@ -34,5 +34,5 @@ public property executeNOP(SVM st) -> (SVM nst):
 public property executeLDC(SVM st, u32 k) -> (SVM nst):
     st{pc:=st.pc+1}{stack:=st.stack[st.sp:=k]}{sp:=st.sp+1}
 
-public property execytePOP(SVM st) -> (SVM nst):
+public property executePOP(SVM st) -> (SVM nst):
     st{pc:=st.pc+1}{sp:=st.sp-1}
