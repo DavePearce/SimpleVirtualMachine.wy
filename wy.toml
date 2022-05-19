@@ -4,7 +4,7 @@ authors=["Joe Bloggs"]
 version="0.1.0"
 
 [build]
-platforms=["whiley"]
+platforms=["whiley","boogie"]
 
 [dependencies]
 std="0.3.2"
