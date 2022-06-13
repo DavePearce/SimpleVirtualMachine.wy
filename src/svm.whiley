@@ -1,4 +1,4 @@
-import u8,u16,u32 from std::int
+import u8,u16 from std::int
 
 // ==============================================================
 // Simple Virtual Machine State
@@ -9,22 +9,24 @@ public type SVM is {
    // to execute
    u16 pc,
    // Stack pointer identifies first unused space.
-   u32 sp,
+   u16 sp,
    // Code memory holds bytecodes to execute.
    u8[] code,
    // Data memory is an arbitrary scratch area.
-   u32[] data,   
+   u16[] data,   
    // Stack is used for evaluating bytecodes.
-   u32[] stack
+   u16[] stack
 }
-where sp <= |stack|
-where |code| < 65536 && pc <= |code|
+// Limit stack pointer and stack size
+where sp <= |stack| && |stack| < 65536 
+// Limit program counter and code size
+where pc <= |code| && |code| < 65536
 
-public property create(u8[] code, u32 datasize, u32 stacksize) -> (SVM r):
+public property create(u8[] code, u16 datasize, u16 stacksize) -> (SVM r):
    return {pc:0, sp:0, code: code, data: [0; datasize], stack: [0; stacksize]}
 
 public property isHalted(SVM st) -> (bool r):
-    return st.pc == |st.code|
+    return st.pc >= |st.code|
 
 // ==============================================================
 // Simple Virtual Machine Opcodes
@@ -41,103 +43,114 @@ public final u8 STORE = 0x03
 public final u8 LOAD = 0x04
 // Add operands on stack
 public final u8 ADD = 0x05
-// Subtract operands on stack
-public final u8 SUB = 0x06
 
 // ==============================================================
 // Simple Virtual Machine Semantics
 // ==============================================================
 
-// Top-level execute method
-public property execute(SVM st) -> (SVM res)
+// Keep executing the current program until the machine halts.
+public property execute(SVM st) -> (SVM res):
+   if isHalted(st):
+       return st
+   else:
+       return execute(step(st))      
+
+// Execute a "single step" of the current program.
+public property step(SVM st) -> (SVM res)
 requires !isHalted(st):
    u8 opcode = st.code[st.pc]
    // increment pc
    SVM nst = st{pc:=st.pc+1}
    // Decode opcode
    if opcode == NOP:
-      return executeNOP(nst)
+      return stepNOP(nst)
    else if opcode == LDC && !isHalted(nst):
       u8 k = nst.code[nst.pc]
-      return executeLDC(nst{pc:=nst.pc+1},k)
+      return stepLDC(nst{pc:=nst.pc+1},k)
    else if opcode == POP:
-      return executePOP(nst)
+      return stepPOP(nst)
    else if opcode == STORE && !isHalted(nst):
       u8 k = nst.code[nst.pc]   
-      return executeSTORE(nst{pc:=nst.pc+1},k)
+      return stepSTORE(nst{pc:=nst.pc+1},k)
    else if opcode == LOAD && !isHalted(nst):
       u8 k = nst.code[nst.pc]   
-      return executeLOAD(nst{pc:=nst.pc+1},k)
+      return stepLOAD(nst{pc:=nst.pc+1},k)
    else if opcode == ADD:
-      return executeADD(nst)
+      return stepADD(nst)
    else:
       // Force machine to halt
       return halt(nst)
 
-public property executeADD(SVM st) -> (SVM nst):
-    if st.sp > 2:
-        // Read operandsw
-        u32 r = peek(st,1)
-        u32 l = peek(st,2)
-        u32 v = 0 // (l + r) % 4294967296
+// ... l r => (l+r)
+public property stepADD(SVM st) -> (SVM nst):
+    if st.sp >= 2:
+        // Read operands
+        u16 r = peek(st,1)
+        u16 l = peek(st,2)
+        u16 v = (l + r) % 65536
         // done
         return push(pop(pop(st)),v)
     else:
         return halt(st)
 
-public property executeNOP(SVM st) -> (SVM nst):
+public property stepNOP(SVM st) -> (SVM nst):
     return st
 
-public property executeLDC(SVM st, u8 k) -> (SVM nst):
-    return push(st, (u32) k)
-
-public property executePOP(SVM st) -> (SVM nst):
-    return pop(st)
-
-public property executeSTORE(SVM st, u8 k) -> (SVM nst):
-    // sanity check requirements
-    if st.sp > 1 && k < |st.data|:
-        // Read top of stack
-        u32 v = peek(st,1)
-        // Assign to data and pop stack
-        SVM nnst = store(st,k,v)
-        //
-        return pop(nnst)
+public property stepLDC(SVM st, u8 k) -> (SVM nst):
+    // Sanity check requirements
+    if st.sp < |st.stack|:
+        return push(st, (u16) k)
     else:
         return halt(st)
 
-public property executeLOAD(SVM st, u8 k) -> (SVM nst):
+public property stepPOP(SVM st) -> (SVM nst):
+    if st.sp >= 1:
+        return pop(st)
+    else:
+        return halt(st)
+
+public property stepSTORE(SVM st, u8 k) -> (SVM nst):
+    // sanity check requirements
+    if st.sp >= 1 && k < |st.data|:
+        // Read top of stack
+        u16 v = peek(st,1)
+        // Assign to data and pop stack
+        return pop(store(st,k,v))
+    else:
+        return halt(st)
+
+public property stepLOAD(SVM st, u8 k) -> (SVM nst):
     // Sanity check requirements
-    if k < |st.data|:
+    if st.sp < |st.stack| && k < |st.data|:
         // Read value from data
-        u32 v = read(st,k)
+        u16 v = read(st,k)
         // Push data to stack
         return push(st,v)
     else:
         return halt(st)
 
 // ==============================================================
-// Helpers
+// Microcode Instructions
 // ==============================================================
 
-public property push(SVM st, u32 k) -> SVM
+public property push(SVM st, u16 k) -> SVM
 requires st.sp < |st.stack|:
     return st{stack:=st.stack[st.sp:=k]}{sp:=st.sp+1}
 
-public property peek(SVM st, int n) -> u32
+public property peek(SVM st, int n) -> u16
 requires st.sp < |st.stack|
-requires 0 <= n && n < st.sp:
+requires 0 < n && n <= st.sp:
     return st.stack[st.sp - n]
 
 public property pop(SVM st) -> SVM
-requires st.sp > 1:
+requires st.sp > 0:
    return st{sp:=st.sp-1}
 
-public property read(SVM st, u8 address) -> u32
+public property read(SVM st, u8 address) -> u16
 requires address < |st.data|:
    return st.data[address]
 
-public property store(SVM st, u8 address, u32 value) -> SVM
+public property store(SVM st, u8 address, u16 value) -> SVM
 requires address < |st.data|:
    return st{data:=st.data[address:=value]}
 
