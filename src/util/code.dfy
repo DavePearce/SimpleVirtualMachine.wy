@@ -16,10 +16,13 @@ module Code {
 	type T<S> = c:Raw<S> | |c.contents| < MAX_U16 witness Code([])
 
 	/**
-   * Create an empty code segment which can be used whenever we need a witness.
+   * Create a code segment from an initial sequence of words.
    */
-	function method empty<S>() : T<S> { Code(contents:=[]) }
-
+	function method create<S>(contents:seq<S>) : T<S>
+		requires |contents| < MAX_U16 {
+				Code(contents:=contents)
+	}		
+	
 	/**
    * Get the size of this code segment.
    */

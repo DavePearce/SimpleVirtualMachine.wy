@@ -27,9 +27,12 @@ module Stack {
 		function size<S>(st:T<S>) : int { st.sp }
 
 		/**
-     * Create an empty stack which can be used whenever we need a witness.
+     * Create a stack from an initial sequence of words.
      */
-		function method empty<S>() : T<S> { Stack(contents:=[],sp:=0) }
+		function method create<S>(contents:seq<S>) : T<S>
+		requires |contents| <= MAX_U16 {
+				Stack(contents:=contents,sp:=0)
+		}
 		
 		/**
 		 * Push a value onto this Stack.  This requires that there is sufficient 
