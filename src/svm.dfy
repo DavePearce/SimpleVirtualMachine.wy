@@ -91,6 +91,7 @@ module SVM {
 				else if opcode == LDC then evalLDC(vm')
 				else if opcode == LOAD then evalLOAD(vm')
 				else if opcode == NOP then evalNOP(vm')
+				else if opcode == POP then evalPOP(vm')						
 				else if opcode == STORE then evalSTORE(vm')				
 				else 
 		 				halt(vm')
@@ -101,7 +102,7 @@ module SVM {
 	 * pushes their sum back.
 	 */
 	function evalADD(vm:SVM) : SVM {
-		if !halted(vm) && operands(vm,2)
+		if operands(vm,2)
 				then
 				var rhs := peek(vm,1) as int;
 				var lhs := peek(vm,2) as int;
@@ -149,6 +150,17 @@ module SVM {
 	 * Execute a NOP instruction which leaves the SVM unchanged.
 	 */
 	function evalNOP(vm:SVM) : SVM { vm }
+
+	/**
+	 * Execute a POP instruction which takes top item off stack.
+	 */
+	function evalPOP(vm:SVM) : SVM {
+		if operands(vm,1)
+			then
+				pop(vm)
+		else
+				halt(vm)
+	}
 	
 	/**
 	 * Execute a STORE instruction which pushes the contents of a 
