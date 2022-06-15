@@ -4,8 +4,8 @@ module Stack {
 		import opened Int 
 
 		/**
-     * A raw stack consistents of a sequence of data, and a stack pointer.
-     */
+		 * A raw stack consistents of a sequence of data, and a stack pointer.
+		 */
 		datatype Raw<T> = Stack(contents:seq<T>, sp:nat)
 			
 		/**
@@ -27,8 +27,8 @@ module Stack {
 		function size<S>(st:T<S>) : int { st.sp }
 
 		/**
-     * Create a stack from an initial sequence of words.
-     */
+		 * Create a stack from an initial sequence of words.
+		 */
 		function method create<S>(contents:seq<S>) : T<S>
 		requires |contents| <= MAX_U16 {
 				Stack(contents:=contents,sp:=0)
@@ -46,8 +46,8 @@ module Stack {
 		
 		/**
 		 * Peek nth value from top of Stack (where 1 is top item, 2 is next item, 
-     * and so on).  This requires there are sufficiently 
-     * many values.
+		 * and so on).  This requires there are sufficiently 
+		 * many values.
 		 */
 		function peek<S>(st:T<S>, k:int) : S
 				// Sanity check enough items to pop!

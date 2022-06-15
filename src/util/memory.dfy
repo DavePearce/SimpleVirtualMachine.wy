@@ -13,8 +13,8 @@ module Memory {
 		witness Memory([])
 
 		/**
-     * Create a memory from an initial sequence of words.
-     */
+		 * Create a memory from an initial sequence of words.
+		 */
 		function method create<S>(contents:seq<S>) : T<S>
 		requires |contents| < MAX_U16 {
 				Memory(contents:=contents)

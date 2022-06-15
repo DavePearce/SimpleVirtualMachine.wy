@@ -62,17 +62,17 @@ module SVM {
 	// Store top of stack to data
 	const STORE:u8 := 0x03
 	// Load data to stack
-  const LOAD:u8 := 0x04
-  // Add operands on stack
-  const ADD:u8 := 0x05
+	const LOAD:u8 := 0x04
+	// Add operands on stack
+	const ADD:u8 := 0x05
 
 	// =============================================================================
 	// Instructions
 	// =============================================================================
 
 	/**
-   * Continue executing virtual machine until it halts.
-   */
+	 * Continue executing virtual machine until it halts.
+	 */
 	function run(vm:SVM,gas:nat) : SVM
 		decreases gas {
 		if halted(vm) || gas == 0 then vm
