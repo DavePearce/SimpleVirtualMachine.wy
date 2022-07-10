@@ -43,6 +43,18 @@ public final u8 STORE = 0x03
 public final u8 LOAD = 0x04
 // Add operands on stack
 public final u8 ADD = 0x05
+// Subtract operands on stack
+public final u8 SUB = 0x06
+// Multiply operands on stack
+public final u8 MUL = 0x07
+// Divide operands on stack
+public final u8 DIV = 0x08
+
+// ...
+
+// Unconditional (Relative) branch
+public final u8 JMP = 0x10
+public final u8 JZ = 0x11
 
 // ==============================================================
 // Simple Virtual Machine Semantics
@@ -53,63 +65,115 @@ public property execute(SVM st) -> (SVM res):
    if isHalted(st):
        return st
    else:
-       return execute(step(st))      
+       return execute(eval(st))      
 
 // Execute a "single step" of the current program.
-public property step(SVM st) -> (SVM res)
+public property eval(SVM st) -> (SVM res)
 requires !isHalted(st):
    u8 opcode = st.code[st.pc]
    // increment pc
    SVM nst = st{pc:=st.pc+1}
    // Decode opcode
    if opcode == NOP:
-      return stepNOP(nst)
+      return evalNOP(nst)
    else if opcode == LDC && !isHalted(nst):
       u8 k = nst.code[nst.pc]
-      return stepLDC(nst{pc:=nst.pc+1},k)
+      return evalLDC(nst{pc:=nst.pc+1},k)
    else if opcode == POP:
-      return stepPOP(nst)
+      return evalPOP(nst)
    else if opcode == STORE && !isHalted(nst):
       u8 k = nst.code[nst.pc]   
-      return stepSTORE(nst{pc:=nst.pc+1},k)
+      return evalSTORE(nst{pc:=nst.pc+1},k)
    else if opcode == LOAD && !isHalted(nst):
       u8 k = nst.code[nst.pc]   
-      return stepLOAD(nst{pc:=nst.pc+1},k)
+      return evalLOAD(nst{pc:=nst.pc+1},k)
    else if opcode == ADD:
-      return stepADD(nst)
+      return evalADD(nst)
+   else if opcode == SUB:
+      return evalSUB(nst)
+   else if opcode == MUL:
+      return evalMUL(nst)
+   else if opcode == DIV:
+      return evalDIV(nst)
+   else if opcode == JMP && !isHalted(nst):
+      u8 k = nst.code[nst.pc]
+      return evalJMP(nst{pc:=nst.pc+1},k)
    else:
       // Force machine to halt
       return halt(nst)
 
 // ... l r => (l+r)
-public property stepADD(SVM st) -> (SVM nst):
+public property evalADD(SVM st) -> (SVM nst):
     if st.sp >= 2:
         // Read operands
         u16 r = peek(st,1)
         u16 l = peek(st,2)
-        u16 v = (l + r) % 65536
+        u16 v = (l + r) % 0xFFFF
         // done
         return push(pop(pop(st)),v)
     else:
         return halt(st)
 
-public property stepNOP(SVM st) -> (SVM nst):
+// ... l r => (l-r)
+public property evalSUB(SVM st) -> (SVM nst):
+    if st.sp >= 2:
+        // Read operands
+        u16 r = peek(st,1)
+        u16 l = peek(st,2)
+        u16 v = (l - r) % 0xFFFF
+        // done
+        return push(pop(pop(st)),v)
+    else:
+        return halt(st)
+
+// ... l r => (l*r)
+public property evalMUL(SVM st) -> (SVM nst):
+    if st.sp >= 2:
+        // Read operands
+        u16 r = peek(st,1)
+        u16 l = peek(st,2)
+        u16 v = (l * r) % 0xFFFF
+        // done
+        return push(pop(pop(st)),v)
+    else:
+        return halt(st)
+
+// ... l r => (l/r) if r != 0
+public property evalDIV(SVM st) -> (SVM nst):
+    if st.sp >= 2 && peek(st,1) != 0:
+        // Read operands
+        u16 r = peek(st,1)
+        u16 l = peek(st,2)
+        u16 v = l / r
+        // done
+        return push(pop(pop(st)),v)
+    else:
+        return halt(st)
+
+// pc = 2 + k
+public property evalJMP(SVM st, u8 k) -> (SVM nst):
+   if (st.pc+k) < |st.code|:    
+       return st{pc:=st.pc+k}
+   else:
+       return halt(st)
+
+public property evalNOP(SVM st) -> (SVM nst):
     return st
 
-public property stepLDC(SVM st, u8 k) -> (SVM nst):
+public property evalLDC(SVM st, u8 k) -> (SVM nst):
     // Sanity check requirements
     if st.sp < |st.stack|:
         return push(st, (u16) k)
     else:
         return halt(st)
 
-public property stepPOP(SVM st) -> (SVM nst):
+public property evalPOP(SVM st) -> (SVM nst):
     if st.sp >= 1:
         return pop(st)
     else:
         return halt(st)
 
-public property stepSTORE(SVM st, u8 k) -> (SVM nst):
+public property evalSTORE(SVM st, u8 k) -> (SVM nst):
     // sanity check requirements
     if st.sp >= 1 && k < |st.data|:
         // Read top of stack
@@ -119,7 +183,7 @@ public property stepSTORE(SVM st, u8 k) -> (SVM nst):
     else:
         return halt(st)
 
-public property stepLOAD(SVM st, u8 k) -> (SVM nst):
+public property evalLOAD(SVM st, u8 k) -> (SVM nst):
     // Sanity check requirements
     if st.sp < |st.stack| && k < |st.data|:
         // Read value from data
