@@ -1,5 +1,13 @@
 import u8,u16 from std::int
 
+public final u8 OK = 0
+public final u8 INVALID_BYTECODE = 0
+public final u8 INVALID_JUMPDEST = 1
+public final u8 STACK_OVERFLOW = 2
+public final u8 STACK_UNDERFLOW = 3
+public final u8 DATA_OVERFLOW = 4
+public final u8 DIVIDE_BY_ZERO = 5
+
 // ==============================================================
 // Simple Virtual Machine State
 // ==============================================================
@@ -19,14 +27,23 @@ public type SVM is {
 }
 // Limit stack pointer and stack size
 where sp <= |stack| && |stack| < 65536 
-// Limit program counter and code size
-where pc <= |code| && |code| < 65536
+// Limit code size (allowing for 255 error codes)
+where |code| < 65280
 
-public property create(u8[] code, u16 datasize, u16 stacksize) -> (SVM r):
-   return {pc:0, sp:0, code: code, data: [0; datasize], stack: [0; stacksize]}
+public property execute(u8[] code, u16[] data, u16 stacksize) -> (SVM res)
+requires |code| < 65280:
+    return execute(create(code,data,stacksize))
+
+public property create(u8[] code, u16[] data, u16 stacksize) -> (SVM r)
+requires |code| < 65280:
+   return {pc:0, sp:0, code: code, data: data, stack: [0; stacksize]}
 
 public property isHalted(SVM st) -> (bool r):
     return st.pc >= |st.code|
+
+public property haltCode(SVM st) -> (u8 r)
+requires isHalted(st):
+    return |st.code| - st.pc
 
 // ==============================================================
 // Simple Virtual Machine Opcodes
@@ -100,98 +117,104 @@ requires !isHalted(st):
       return evalJMP(nst{pc:=nst.pc+1},k)
    else:
       // Force machine to halt
-      return halt(nst)
+      return halt(nst, INVALID_BYTECODE)
 
 // ... l r => (l+r)
 public property evalADD(SVM st) -> (SVM nst):
-    if st.sp >= 2:
+    if st.sp < 2:
+        return halt(st, STACK_UNDERFLOW)
+    else:
         // Read operands
         u16 r = peek(st,1)
         u16 l = peek(st,2)
-        u16 v = (l + r) % 0xFFFF
+        u16 v = (l + r) % 0x10000
         // done
         return push(pop(pop(st)),v)
-    else:
-        return halt(st)
 
 // ... l r => (l-r)
 public property evalSUB(SVM st) -> (SVM nst):
-    if st.sp >= 2:
+    if st.sp < 2:
+        return halt(st, STACK_UNDERFLOW)
+    else:
         // Read operands
         u16 r = peek(st,1)
         u16 l = peek(st,2)
-        u16 v = (l - r) % 0xFFFF
+        u16 v = (l - r) % 0x10000
         // done
         return push(pop(pop(st)),v)
-    else:
-        return halt(st)
 
 // ... l r => (l*r)
 public property evalMUL(SVM st) -> (SVM nst):
-    if st.sp >= 2:
+    if st.sp < 2:
+        return halt(st, STACK_UNDERFLOW)
+    else:
         // Read operands
         u16 r = peek(st,1)
         u16 l = peek(st,2)
-        u16 v = (l * r) % 0xFFFF
+        u16 v = (l * r) % 0x10000
         // done
         return push(pop(pop(st)),v)
-    else:
-        return halt(st)
 
 // ... l r => (l/r) if r != 0
 public property evalDIV(SVM st) -> (SVM nst):
-    if st.sp >= 2 && peek(st,1) != 0:
+    if st.sp < 2:
+        return halt(st, STACK_UNDERFLOW)
+    else if peek(st,1) == 0:
+        return halt(st, DIVIDE_BY_ZERO)
+    else:
         // Read operands
         u16 r = peek(st,1)
         u16 l = peek(st,2)
         u16 v = l / r
         // done
         return push(pop(pop(st)),v)
-    else:
-        return halt(st)
 
 // pc = 2 + k
 public property evalJMP(SVM st, u8 k) -> (SVM nst):
-   if (st.pc+k) < |st.code|:    
-       return st{pc:=st.pc+k}
+   if (st.pc+k) >= |st.code|:
+       return halt(st, INVALID_JUMPDEST)
    else:
-       return halt(st)
+       return st{pc:=st.pc+k}
 
 public property evalNOP(SVM st) -> (SVM nst):
     return st
 
 public property evalLDC(SVM st, u8 k) -> (SVM nst):
     // Sanity check requirements
-    if st.sp < |st.stack|:
-        return push(st, (u16) k)
+    if st.sp >= |st.stack|:
+        return halt(st, STACK_OVERFLOW)
     else:
-        return halt(st)
+        return push(st, (u16) k)
 
 public property evalPOP(SVM st) -> (SVM nst):
-    if st.sp >= 1:
-        return pop(st)
+    if st.sp < 1:
+        return halt(st, STACK_OVERFLOW)
     else:
-        return halt(st)
+        return pop(st)
 
 public property evalSTORE(SVM st, u8 k) -> (SVM nst):
     // sanity check requirements
-    if st.sp >= 1 && k < |st.data|:
+    if st.sp < 1:
+        return halt(st, STACK_UNDERFLOW)
+    else if k >= |st.data|:
+        return halt(st, DATA_OVERFLOW)    
+    else:
         // Read top of stack
         u16 v = peek(st,1)
         // Assign to data and pop stack
         return pop(store(st,k,v))
-    else:
-        return halt(st)
 
 public property evalLOAD(SVM st, u8 k) -> (SVM nst):
     // Sanity check requirements
-    if st.sp < |st.stack| && k < |st.data|:
+    if st.sp >= |st.stack| :
+        return halt(st, STACK_OVERFLOW)
+    else if k >= |st.data|:
+        return halt(st, DATA_OVERFLOW)    
+    else:
         // Read value from data
         u16 v = read(st,k)
         // Push data to stack
         return push(st,v)
-    else:
-        return halt(st)
 
 // ==============================================================
 // Microcode Instructions
@@ -218,5 +241,5 @@ public property store(SVM st, u8 address, u16 value) -> SVM
 requires address < |st.data|:
    return st{data:=st.data[address:=value]}
 
-public property halt(SVM st) -> SVM:
-   return st{pc:=|st.code|}
+public property halt(SVM st, u8 rval) -> SVM:
+   return st{pc:=|st.code| + rval}
