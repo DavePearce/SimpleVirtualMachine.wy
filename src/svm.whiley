@@ -1,12 +1,12 @@
 import u8,u16 from std::int
 
 public final u8 OK = 0
-public final u8 INVALID_BYTECODE = 0
-public final u8 INVALID_JUMPDEST = 1
-public final u8 STACK_OVERFLOW = 2
-public final u8 STACK_UNDERFLOW = 3
-public final u8 DATA_OVERFLOW = 4
-public final u8 DIVIDE_BY_ZERO = 5
+public final u8 INVALID_BYTECODE = 1
+public final u8 INVALID_JUMPDEST = 2
+public final u8 STACK_OVERFLOW = 3
+public final u8 STACK_UNDERFLOW = 4
+public final u8 DATA_OVERFLOW = 5
+public final u8 DIVIDE_BY_ZERO = 6
 
 // ==============================================================
 // Simple Virtual Machine State
@@ -28,20 +28,20 @@ public type SVM is {
 // Limit stack pointer and stack size
 where sp <= |stack| && |stack| < 65536 
 // Limit code size (allowing for 255 error codes)
-where |code| < 65280
+where |code| <= 0xFF00
 
 public property execute(u8[] code, u16[] data, u16 stacksize) -> (SVM res)
-requires |code| < 65280:
+requires |code| <= 0xFF00:
     return execute(create(code,data,stacksize))
 
 public property create(u8[] code, u16[] data, u16 stacksize) -> (SVM r)
-requires |code| < 65280:
+requires |code| <= 0xFF00:
    return {pc:0, sp:0, code: code, data: data, stack: [0; stacksize]}
 
 public property isHalted(SVM st) -> (bool r):
     return st.pc >= |st.code|
 
-public property haltCode(SVM st) -> (u8 r)
+public property exitCode(SVM st) -> (u8 r)
 requires isHalted(st):
     return |st.code| - st.pc
 
@@ -115,6 +115,9 @@ requires !isHalted(st):
    else if opcode == JMP && !isHalted(nst):
       u8 k = nst.code[nst.pc]
       return evalJMP(nst{pc:=nst.pc+1},k)
+   else if opcode == JZ && !isHalted(nst):
+      u8 k = nst.code[nst.pc]
+      return evalJZ(nst{pc:=nst.pc+1},k)      
    else:
       // Force machine to halt
       return halt(nst, INVALID_BYTECODE)
@@ -171,10 +174,24 @@ public property evalDIV(SVM st) -> (SVM nst):
 
 // pc = 2 + k
 public property evalJMP(SVM st, u8 k) -> (SVM nst):
-   if (st.pc+k) >= |st.code|:
+   if (st.pc+k) > |st.code|:
        return halt(st, INVALID_JUMPDEST)
    else:
        return st{pc:=st.pc+k}
+
+// ... v => ... where pc = 2 + k (if v == 0)
+public property evalJZ(SVM st, u8 k) -> (SVM nst):
+   if st.sp < 1:
+       return halt(st, STACK_UNDERFLOW)
+   else if (st.pc+k) > |st.code|:
+       return halt(st, INVALID_JUMPDEST)
+   else:
+       u16 v = peek(st,1)
+       //
+       if v == 0:
+           return pop(st{pc:=st.pc+k})
+       else:
+           return pop(st)
 
 public property evalNOP(SVM st) -> (SVM nst):
     return st
